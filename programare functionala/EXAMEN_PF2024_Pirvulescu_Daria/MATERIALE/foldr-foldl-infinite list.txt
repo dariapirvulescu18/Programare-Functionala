@@ -1,0 +1,50 @@
+
+
+How folds differ seems to be a frequent source of confusion, so here's a more general overview:
+
+Consider folding a list of n values [x1, x2, x3, x4 ... xn ] with some function f and seed z.
+foldl is:
+
+    Left associative: f ( ... (f (f (f (f z x1) x2) x3) x4) ...) xn
+    Tail recursive: It iterates through the list, producing the value afterwards
+    Lazy: Nothing is evaluated until the result is needed
+    Backwards: foldl (flip (:)) [] reverses a list.
+
+foldr is:
+
+    Right associative: f x1 (f x2 (f x3 (f x4 ... (f xn z) ... )))
+    Recursive into an argument: Each iteration applies f to the next value and the result of folding the rest of the list.
+    Lazy: Nothing is evaluated until the result is needed
+    Forwards: foldr (:) [] returns a list unchanged.
+
+There's a slightly subtle point here that trips people up sometimes: Because foldl is backwards each application of f is added to the outside of the result; and because it is lazy, nothing is evaluated until the result is required. This means that to compute any part of the result, Haskell first iterates through the entire list constructing an expression of nested function applications, then evaluates the outermost function, evaluating its arguments as needed. If f always uses its first argument, this means Haskell has to recurse all the way down to the innermost term, then work backwards computing each application of f.
+
+This is obviously a far cry from the efficient tail-recursion most functional programmers know and love!
+
+In fact, even though foldl is technically tail-recursive, because the entire result expression is built before evaluating anything, foldl can cause a stack overflow!
+
+On the other hand, consider foldr. It's also lazy, but because it runs forwards, each application of f is added to the inside of the result. So, to compute the result, Haskell constructs a single function application, the second argument of which is the rest of the folded list. If f is lazy in its second argument--a data constructor, for instance--the result will be incrementally lazy, with each step of the fold computed only when some part of the result that needs it is evaluated.
+
+So we can see why foldr sometimes works on infinite lists when foldl doesn't: The former can lazily convert an infinite list into another lazy infinite data structure, whereas the latter must inspect the entire list to generate any part of the result. On the other hand, foldr with a function that needs both arguments immediately, such as (+), works (or rather, doesn't work) much like foldl, building a huge expression before evaluating it.
+
+So the two important points to note are these:
+
+    foldr can transform one lazy recursive data structure into another.
+    Otherwise, lazy folds will crash with a stack overflow on large or infinite lists.
+
+You may have noticed that it sounds like foldr can do everything foldl can, plus more. This is true! In fact, foldl is nearly useless!
+
+But what if we want to produce a non-lazy result by folding over a large (but not infinite) list? For this, we want a strict fold, which the standard libraries thoughfully provide:
+foldl' is:
+
+    Left associative: f ( ... (f (f (f (f z x1) x2) x3) x4) ...) xn
+    Tail recursive: It iterates through the list, producing the value afterwards
+    Strict: Each function application is evaluated along the way
+    Backwards: foldl' (flip (:)) [] reverses a list.
+
+Because foldl' is strict, to compute the result Haskell will evaluate f at each step, instead of letting the left argument accumulate a huge, unevaluated expression. This gives us the usual, efficient tail recursion we want! In other words:
+
+    foldl' can fold large lists efficiently.
+    foldl' will hang in an infinite loop (not cause a stack overflow) on an infinite list.
+
+
